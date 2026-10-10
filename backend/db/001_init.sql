@@ -1,0 +1,87 @@
+CREATE TABLE IF NOT EXISTS users (
+ id SERIAL PRIMARY KEY,
+ name VARCHAR(120) NOT NULL,
+ email VARCHAR(180) UNIQUE NOT NULL,
+ password_hash TEXT NOT NULL,
+ role VARCHAR(20) NOT NULL DEFAULT 'PATIENT' CHECK (role IN ('ADMIN','RECEPTION','DOCTOR','PATIENT')),
+ phone VARCHAR(30),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS clinics (
+ id SERIAL PRIMARY KEY,
+ name VARCHAR(160) NOT NULL,
+ address TEXT NOT NULL,
+ city VARCHAR(80) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS doctors (
+ id SERIAL PRIMARY KEY,
+ user_id INTEGER UNIQUE REFERENCES users(id) ON DELETE SET NULL,
+ name VARCHAR(120) NOT NULL,
+ specialty VARCHAR(120) NOT NULL,
+ email VARCHAR(180) UNIQUE NOT NULL,
+ phone VARCHAR(30),
+ bio TEXT,
+ experience_years INTEGER NOT NULL DEFAULT 5,
+ rating NUMERIC(2,1) NOT NULL DEFAULT 4.8,
+ review_count INTEGER NOT NULL DEFAULT 0,
+ consultation_fee INTEGER NOT NULL DEFAULT 500,
+ online_fee INTEGER NOT NULL DEFAULT 500,
+ languages TEXT NOT NULL DEFAULT 'English,Hindi',
+ clinic_id INTEGER REFERENCES clinics(id) ON DELETE SET NULL,
+ available BOOLEAN NOT NULL DEFAULT TRUE,
+ verified BOOLEAN NOT NULL DEFAULT TRUE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS doctor_slots (
+ id SERIAL PRIMARY KEY,
+ doctor_id INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+ slot_date DATE NOT NULL,
+ slot_time TIME NOT NULL,
+ mode VARCHAR(20) NOT NULL DEFAULT 'CLINIC' CHECK (mode IN ('CLINIC','ONLINE','BOTH')),
+ UNIQUE(doctor_id,slot_date,slot_time)
+);
+CREATE TABLE IF NOT EXISTS appointments (
+ id SERIAL PRIMARY KEY,
+ patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+ doctor_id INTEGER NOT NULL REFERENCES doctors(id) ON DELETE RESTRICT,
+ clinic_id INTEGER REFERENCES clinics(id) ON DELETE SET NULL,
+ appointment_date DATE NOT NULL,
+ appointment_time TIME NOT NULL,
+ reason TEXT,
+ mode VARCHAR(20) NOT NULL DEFAULT 'CLINIC' CHECK (mode IN ('CLINIC','ONLINE')),
+ status VARCHAR(30) NOT NULL DEFAULT 'BOOKED' CHECK (status IN ('BOOKED','CONFIRMED','COMPLETED','CANCELLED')),
+ payment_status VARCHAR(30) NOT NULL DEFAULT 'PENDING' CHECK (payment_status IN ('PENDING','PAID','FAILED','REFUNDED','PAY_AT_CLINIC')),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ UNIQUE(doctor_id,appointment_date,appointment_time)
+);
+CREATE TABLE IF NOT EXISTS payments (
+ id SERIAL PRIMARY KEY,
+ appointment_id INTEGER UNIQUE NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+ amount INTEGER NOT NULL,
+ method VARCHAR(30) NOT NULL CHECK (method IN ('ONLINE','PAY_AT_CLINIC')),
+ status VARCHAR(30) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','PAID','FAILED','REFUNDED')),
+ reference VARCHAR(80),
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS notifications (
+ id SERIAL PRIMARY KEY,
+ user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title VARCHAR(160) NOT NULL,
+ message TEXT NOT NULL,
+ read_at TIMESTAMPTZ,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS reviews (
+ id SERIAL PRIMARY KEY,
+ patient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ doctor_id INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+ rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+ comment TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ UNIQUE(patient_id,doctor_id)
+);
+CREATE INDEX IF NOT EXISTS idx_doctor_slots_lookup ON doctor_slots(doctor_id,slot_date,slot_time);
+CREATE INDEX IF NOT EXISTS idx_appointments_patient ON appointments(patient_id,appointment_date);
+CREATE INDEX IF NOT EXISTS idx_appointments_doctor ON appointments(doctor_id,appointment_date);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id,created_at DESC);
